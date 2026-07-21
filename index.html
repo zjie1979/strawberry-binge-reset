@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>草莓暴食后餐单</title>
+  <meta name="theme-color" content="#d73757">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="暴食餐单">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">草莓饮食</p>
+        <h1>暴食后餐单</h1>
+      </div>
+      <button class="icon-button" id="resetTodayBtn" type="button" aria-label="重置今天">↺</button>
+    </header>
+
+    <section class="status-panel">
+      <div>
+        <span class="label">当前选择</span>
+        <strong id="activePlanName">未选择餐单</strong>
+      </div>
+      <div class="progress-ring" aria-label="今日完成度">
+        <span id="progressText">0%</span>
+      </div>
+    </section>
+
+    <section class="notice">
+      <strong>短期恢复用。</strong>
+      <span>适合聚餐、夜宵、高油高盐后临时调整；不要因为有餐单就反复暴食。</span>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>选择餐单</h2>
+        <span id="planCount"></span>
+      </div>
+      <div class="plan-list" id="planList"></div>
+    </section>
+
+    <section class="today-panel" id="todayPanel" hidden>
+      <div class="section-head">
+        <h2>今天照着做</h2>
+        <span id="stepCount">0/0</span>
+      </div>
+      <div class="step-list" id="stepList"></div>
+      <button class="primary-button" id="completeBtn" type="button" disabled>完成今天</button>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>最近记录</h2>
+        <button class="text-button" id="clearHistoryBtn" type="button">清空</button>
+      </div>
+      <div class="history-list" id="historyList"></div>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>
