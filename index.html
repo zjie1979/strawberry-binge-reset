@@ -8,61 +8,77 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="暴食餐单">
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
+  <link rel="manifest" href="./manifest.webmanifest?v=20260722t1">
+  <link rel="apple-touch-icon" href="./icon-180.png">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20260722t1">
 </head>
 <body>
   <main class="app-shell">
-    <header class="topbar">
+    <header class="app-header">
       <div>
         <p class="eyebrow">草莓饮食</p>
-        <h1>暴食后餐单</h1>
+        <h1>草莓暴食后餐单</h1>
+        <p class="app-note">首页只打卡；餐单库按场景选择；记录页看每份餐单完成次数。</p>
       </div>
       <button class="icon-button" id="resetTodayBtn" type="button" aria-label="重置今天">↺</button>
     </header>
 
-    <section class="status-panel">
-      <div>
-        <span class="label">当前选择</span>
-        <strong id="activePlanName">未选择餐单</strong>
+    <section class="view is-active" id="viewToday" aria-labelledby="todayTitle">
+      <div class="view-head compact">
+        <div>
+          <span class="label">首页</span>
+          <h2 id="todayTitle">今日打卡</h2>
+        </div>
+        <span class="pill" id="todayDate"></span>
       </div>
-      <div class="progress-ring" aria-label="今日完成度">
-        <span id="progressText">0%</span>
-      </div>
-    </section>
-
-    <section class="notice">
-      <strong>短期恢复用。</strong>
-      <span>适合聚餐、夜宵、高油高盐后临时调整；不要因为有餐单就反复暴食。</span>
-    </section>
-
-    <section>
-      <div class="section-head">
-        <h2>选择餐单</h2>
-        <span id="planCount"></span>
-      </div>
-      <div class="plan-list" id="planList"></div>
-    </section>
-
-    <section class="today-panel" id="todayPanel" hidden>
-      <div class="section-head">
-        <h2>今天照着做</h2>
-        <span id="stepCount">0/0</span>
-      </div>
+      <section class="status-panel">
+        <div>
+          <span class="label">当前选择</span>
+          <strong id="activePlanName">未选择餐单</strong>
+          <p id="activePlanDesc">去餐单库选一份作为今天的打卡内容。</p>
+        </div>
+        <div class="progress-ring" aria-label="今日完成度">
+          <span id="progressText">0%</span>
+        </div>
+      </section>
       <div class="step-list" id="stepList"></div>
-      <button class="primary-button" id="completeBtn" type="button" disabled>完成今天</button>
+      <div class="today-actions">
+        <button class="primary-button" id="completeBtn" type="button" disabled>完成今天</button>
+        <button class="secondary-button" type="button" data-tab="library">去选餐单</button>
+      </div>
+      <p class="auto-note" id="autoNote">不会自动进入下一份；明天重新选择。</p>
     </section>
 
-    <section>
-      <div class="section-head">
-        <h2>最近记录</h2>
-        <button class="text-button" id="clearHistoryBtn" type="button">清空</button>
+    <section class="view" id="viewLibrary" aria-labelledby="libraryTitle">
+      <div class="view-head">
+        <div>
+          <span class="label">第二页</span>
+          <h2 id="libraryTitle">餐单库</h2>
+          <p id="librarySub">先选系列，再看这个系列里的每天可选餐单。</p>
+        </div>
       </div>
-      <div class="history-list" id="historyList"></div>
+      <div id="libraryContent"></div>
+    </section>
+
+    <section class="view" id="viewRecords" aria-labelledby="recordsTitle">
+      <div class="view-head">
+        <div>
+          <span class="label">第三页</span>
+          <h2 id="recordsTitle">记录统计</h2>
+          <p>查看最近完成记录，以及每个系列、每份餐单打卡了多少次。</p>
+        </div>
+      </div>
+      <div id="recordsContent"></div>
     </section>
   </main>
-  <script src="./app.js"></script>
+
+  <nav class="bottom-tabs" aria-label="主导航">
+    <button class="tab-button is-active" type="button" data-tab="today">今日</button>
+    <button class="tab-button" type="button" data-tab="library">餐单库</button>
+    <button class="tab-button" type="button" data-tab="records">记录</button>
+  </nav>
+
+  <script src="./app.js?v=20260722t1"></script>
 </body>
 </html>
