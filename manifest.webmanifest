@@ -1,7 +1,7 @@
 {
   "name": "草莓暴食后餐单",
   "short_name": "暴食餐单",
-  "description": "可选择的暴食后恢复餐单打卡 PWA。",
+  "description": "草莓暴食后餐单三页式每日自选打卡 PWA，非官方整理版。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
