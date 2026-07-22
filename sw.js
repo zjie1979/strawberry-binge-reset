@@ -1,10 +1,10 @@
-const CACHE_NAME = "strawberry-binge-reset-v1";
+const CACHE_NAME = "strawberry-binge-reset-20260722t1";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./manifest.webmanifest",
+  "./styles.css?v=20260722t1",
+  "./app.js?v=20260722t1",
+  "./manifest.webmanifest?v=20260722t1",
   "./icon.svg",
   "./icon-180.png",
   "./icon-192.png",
