@@ -81,158 +81,579 @@ const plans = [
   }
 ];
 
-const state = loadState();
+const bingeSeriesById = {
+  "reset-original": "暴食后当天恢复",
+  "reset-flex": "暴食后当天恢复",
+  "reset-light": "暴食后当天恢复",
+  "reset-v3-fast": "恢复 3.0",
+  "reset-v3-two-day": "恢复 3.0",
+  "holiday-meal": "节假日聚餐日"
+};
 
-const planList = document.querySelector("#planList");
-const stepList = document.querySelector("#stepList");
-const todayPanel = document.querySelector("#todayPanel");
-const activePlanName = document.querySelector("#activePlanName");
-const progressText = document.querySelector("#progressText");
-const stepCount = document.querySelector("#stepCount");
-const completeBtn = document.querySelector("#completeBtn");
-const historyList = document.querySelector("#historyList");
-const planCount = document.querySelector("#planCount");
+const mealPlans = plans.map((plan) => ({
+  id: plan.id,
+  title: plan.name,
+  series: bingeSeriesById[plan.id] || plan.tag || "暴食后恢复",
+  source: "草莓饮食",
+  summary: plan.desc,
+  fit: plan.desc,
+  meals: plan.steps.map(([slot, food]) => ({ slot, food, tag: plan.tag })),
+  rules: [
+    "短期恢复使用，当天手动保存记录。",
+    "不要因为有餐单就反复暴食。"
+  ]
+}));
 
-function loadState() {
-  const fallback = { activePlanId: plans[0].id, checked: {}, history: [] };
-  try {
-    return { ...fallback, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
-  } catch {
-    return fallback;
+const APP_SOURCE_TEXT = [
+  "草莓暴食后餐单整理版，仅作为个人短期打卡工具。数据保存在当前浏览器，不含账号、服务端和第三方接口。",
+  "餐单适合聚餐、夜宵、高油高盐后临时调整；不要因为有餐单就反复暴食。身体不舒服、低血糖、经期明显不适、备孕/孕期/哺乳期、疾病或用药期间不要硬跟。"
+];
+
+(function tabbedRuntime() {
+  const pendingItems = typeof pendingNotes !== "undefined"
+    ? pendingNotes
+    : (typeof pendingPlans !== "undefined" ? pendingPlans : []);
+  const seriesNames = Array.from(new Set(mealPlans.map((plan) => plan.series || "其他")));
+  const planById = new Map(mealPlans.map((plan) => [plan.id, plan]));
+  const sourceLines = APP_SOURCE_TEXT;
+  const nodes = {
+    todayDate: document.querySelector("#todayDate"),
+    activePlanName: document.querySelector("#activePlanName"),
+    activePlanDesc: document.querySelector("#activePlanDesc"),
+    progressText: document.querySelector("#progressText"),
+    stepList: document.querySelector("#stepList"),
+    completeBtn: document.querySelector("#completeBtn"),
+    autoNote: document.querySelector("#autoNote"),
+    libraryTitle: document.querySelector("#libraryTitle"),
+    librarySub: document.querySelector("#librarySub"),
+    libraryContent: document.querySelector("#libraryContent"),
+    recordsContent: document.querySelector("#recordsContent")
+  };
+
+  const state = loadState();
+
+  function defaultState() {
+    const firstId = mealPlans[0]?.id || "";
+    return {
+      tab: "today",
+      activePlanId: firstId,
+      selectedSeries: "",
+      detailId: "",
+      recordSeries: "",
+      checked: {},
+      history: []
+    };
   }
-}
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function getActivePlan() {
-  return plans.find((plan) => plan.id === state.activePlanId) || plans[0];
-}
-
-function getCheckedSet() {
-  const key = todayKey();
-  const plan = getActivePlan();
-  state.checked[key] ||= {};
-  state.checked[key][plan.id] ||= [];
-  return new Set(state.checked[key][plan.id]);
-}
-
-function setCheckedSet(set) {
-  const key = todayKey();
-  const plan = getActivePlan();
-  state.checked[key] ||= {};
-  state.checked[key][plan.id] = [...set];
-  saveState();
-}
-
-function renderPlans() {
-  planCount.textContent = `${plans.length} 个`;
-  planList.innerHTML = plans.map((plan) => `
-    <button class="plan-button ${plan.id === state.activePlanId ? "active" : ""}" type="button" data-plan="${plan.id}">
-      <span class="plan-title">${plan.name}<span class="badge">${plan.tag}</span></span>
-      <span class="plan-desc">${plan.desc}</span>
-    </button>
-  `).join("");
-}
-
-function renderSteps() {
-  const plan = getActivePlan();
-  const checked = getCheckedSet();
-  const done = checked.size;
-  const total = plan.steps.length;
-  const percent = total ? Math.round((done / total) * 100) : 0;
-
-  activePlanName.textContent = plan.name;
-  progressText.textContent = `${percent}%`;
-  document.documentElement.style.setProperty("--progress", `${percent}%`);
-  todayPanel.hidden = false;
-  stepCount.textContent = `${done}/${total}`;
-  completeBtn.disabled = done !== total;
-
-  stepList.innerHTML = plan.steps.map(([name, food], index) => `
-    <button class="check-row ${checked.has(index) ? "done" : ""}" type="button" data-step="${index}">
-      <span class="box" aria-hidden="true"></span>
-      <span>
-        <span class="step-name">${name}</span>
-        <span class="step-food">${food}</span>
-      </span>
-    </button>
-  `).join("");
-}
-
-function renderHistory() {
-  const items = state.history.slice(0, 8);
-  if (!items.length) {
-    historyList.innerHTML = `<p class="empty">还没有完成记录。</p>`;
-    return;
+  function loadState() {
+    const base = defaultState();
+    try {
+      const storedRaw = localStorage.getItem(STORAGE_KEY);
+      const stored = storedRaw ? JSON.parse(storedRaw) : {};
+      let legacy = {};
+      if (!storedRaw && typeof LEGACY_STORAGE_KEY !== "undefined") {
+        legacy = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || "{}");
+      }
+      const activePlanId = validPlanId(stored.activePlanId || stored.activeId || getLegacyActiveId(legacy)) || base.activePlanId;
+      const selectedSeries = seriesNames.includes(stored.selectedSeries) ? stored.selectedSeries : "";
+      const detailId = validPlanId(stored.detailId) || "";
+      const recordSeries = seriesNames.includes(stored.recordSeries) ? stored.recordSeries : "";
+      const checked = stored.checked && typeof stored.checked === "object" && !Array.isArray(stored.checked) ? stored.checked : {};
+      const history = normalizeHistory(Array.isArray(stored.history) ? stored.history : legacy.history);
+      const legacyChecked = Array.isArray(stored.completedMeals)
+        ? stored.completedMeals
+        : (Array.isArray(legacy.checked) ? legacy.checked : []);
+      if (legacyChecked.length) {
+        const plan = planById.get(activePlanId);
+        const indexes = normalizeCheckedIndexes(legacyChecked, plan);
+        if (indexes.length) {
+          const date = todayKey();
+          checked[date] ||= {};
+          checked[date][activePlanId] ||= indexes;
+        }
+      }
+      return {
+        tab: ["today", "library", "records"].includes(stored.tab) ? stored.tab : "today",
+        activePlanId,
+        selectedSeries,
+        detailId,
+        recordSeries,
+        checked,
+        history
+      };
+    } catch {
+      return base;
+    }
   }
-  historyList.innerHTML = items.map((item) => `
-    <div class="history-item">
-      <strong>${item.planName}</strong>
-      <span>${item.date} 完成 · ${item.steps} 项</span>
-    </div>
-  `).join("");
-}
 
-function render() {
-  renderPlans();
-  renderSteps();
-  renderHistory();
-}
-
-planList.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-plan]");
-  if (!button) return;
-  state.activePlanId = button.dataset.plan;
-  saveState();
-  render();
-});
-
-stepList.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-step]");
-  if (!button) return;
-  const index = Number(button.dataset.step);
-  const checked = getCheckedSet();
-  if (checked.has(index)) checked.delete(index);
-  else checked.add(index);
-  setCheckedSet(checked);
-  render();
-});
-
-completeBtn.addEventListener("click", () => {
-  const plan = getActivePlan();
-  const date = todayKey();
-  state.history = state.history.filter((item) => !(item.date === date && item.planId === plan.id));
-  state.history.unshift({ date, planId: plan.id, planName: plan.name, steps: plan.steps.length });
-  saveState();
-  render();
-});
-
-document.querySelector("#resetTodayBtn").addEventListener("click", () => {
-  const key = todayKey();
-  const plan = getActivePlan();
-  if (state.checked[key]) {
-    state.checked[key][plan.id] = [];
+  function getLegacyActiveId(legacy) {
+    if (Array.isArray(legacy.cycleIds)) {
+      return legacy.cycleIds[Number.isInteger(legacy.activeIndex) ? legacy.activeIndex : 0];
+    }
+    if (Array.isArray(legacy.selectedIds)) {
+      return legacy.selectedIds[Number.isInteger(legacy.currentIndex) ? legacy.currentIndex : 0];
+    }
+    if (Number.isInteger(legacy.dayIndex)) return "day-" + (legacy.dayIndex + 1);
+    return "";
   }
-  saveState();
-  render();
-});
 
-document.querySelector("#clearHistoryBtn").addEventListener("click", () => {
-  state.history = [];
-  saveState();
-  render();
-});
+  function validPlanId(id) {
+    return planById.has(id) ? id : "";
+  }
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js");
+  function normalizeCheckedIndexes(values, plan) {
+    if (!plan) return [];
+    return values.map((value) => {
+      if (Number.isInteger(value)) return value;
+      return plan.meals.findIndex((meal) => meal.slot === value);
+    }).filter((index, pos, arr) => index >= 0 && index < plan.meals.length && arr.indexOf(index) === pos);
+  }
+
+  function normalizeHistory(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => {
+      const planId = validPlanId(item.planId || item.id || (Number.isInteger(item.dayIndex) ? "day-" + (item.dayIndex + 1) : ""));
+      const plan = planById.get(planId);
+      const planName = item.planName || item.title || item.dayName || plan?.title || "";
+      if (!planId && !planName) return null;
+      return {
+        date: String(item.date || todayKey()),
+        planId: planId || plan?.id || "",
+        planName: String(planName || "餐单"),
+        steps: Number(item.steps || plan?.meals?.length || 0)
+      };
+    }).filter(Boolean).slice(0, 120);
+  }
+
+  function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function todayKey() {
+    const date = new Date();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${date.getFullYear()}-${month}-${day}`;
+  }
+
+  function todayLabel() {
+    const date = new Date();
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+  }
+
+  function getActivePlan() {
+    if (!planById.has(state.activePlanId)) state.activePlanId = mealPlans[0]?.id || "";
+    return planById.get(state.activePlanId);
+  }
+
+  function getCheckedSet() {
+    const plan = getActivePlan();
+    if (!plan) return new Set();
+    const key = todayKey();
+    state.checked[key] ||= {};
+    state.checked[key][plan.id] ||= [];
+    const indexes = normalizeCheckedIndexes(state.checked[key][plan.id], plan);
+    state.checked[key][plan.id] = indexes;
+    return new Set(indexes);
+  }
+
+  function setCheckedSet(set) {
+    const plan = getActivePlan();
+    if (!plan) return;
+    const key = todayKey();
+    state.checked[key] ||= {};
+    state.checked[key][plan.id] = [...set].sort((a, b) => a - b);
+    saveState();
+  }
+
+  function progressForActive() {
+    const plan = getActivePlan();
+    if (!plan) return { done: 0, total: 0, percent: 0 };
+    const done = getCheckedSet().size;
+    const total = plan.meals.length;
+    return { done, total, percent: total ? Math.round((done / total) * 100) : 0 };
+  }
+
+  function countByPlan() {
+    const counts = new Map(mealPlans.map((plan) => [plan.id, 0]));
+    state.history.forEach((item) => counts.set(item.planId, (counts.get(item.planId) || 0) + 1));
+    return counts;
+  }
+
+  function seriesStats(series) {
+    const counts = countByPlan();
+    const plans = mealPlans.filter((plan) => plan.series === series);
+    const done = plans.reduce((sum, plan) => sum + (counts.get(plan.id) || 0), 0);
+    return { plans, done };
+  }
+
+  function isRecorded(plan) {
+    const date = todayKey();
+    return state.history.some((item) => item.date === date && item.planId === plan.id);
+  }
+
+  function setTab(tab) {
+    state.tab = tab;
+    saveState();
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function renderTabs() {
+    document.querySelectorAll(".view").forEach((view) => view.classList.remove("is-active"));
+    document.querySelector(`#view${state.tab[0].toUpperCase()}${state.tab.slice(1)}`)?.classList.add("is-active");
+    document.querySelectorAll(".tab-button").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.tab === state.tab);
+    });
+  }
+
+  function renderToday() {
+    const plan = getActivePlan();
+    const progress = progressForActive();
+    const checked = getCheckedSet();
+    const recorded = plan ? isRecorded(plan) : false;
+    nodes.todayDate.textContent = todayLabel();
+    nodes.activePlanName.textContent = plan ? plan.title : "未选择餐单";
+    nodes.activePlanDesc.textContent = plan ? `${plan.series || "餐单"} · ${plan.summary || ""}` : "去餐单库选一份作为今天的打卡内容。";
+    nodes.progressText.textContent = `${progress.percent}%`;
+    document.documentElement.style.setProperty("--progress", `${progress.percent}%`);
+    if (!plan) {
+      nodes.stepList.innerHTML = `<p class="empty">先去餐单库选择今天要打卡的餐单。</p>`;
+      nodes.completeBtn.disabled = true;
+      return;
+    }
+    nodes.stepList.innerHTML = plan.meals.map((meal, index) => `
+      <button class="check-row ${checked.has(index) ? "done" : ""}" type="button" data-step="${index}">
+        <span class="box" aria-hidden="true"></span>
+        <span>
+          <span class="step-name">${escapeHtml(meal.slot)}${meal.tag ? `<span class="chip">${escapeHtml(meal.tag)}</span>` : ""}</span>
+          <span class="step-food">${escapeHtml(meal.food)}</span>
+        </span>
+      </button>
+    `).join("");
+    nodes.completeBtn.disabled = progress.done !== progress.total || recorded;
+    nodes.completeBtn.textContent = recorded ? "今天已保存" : "完成今天";
+    nodes.autoNote.textContent = recorded
+      ? "今天记录已保存；明天重新选择想吃的餐单。"
+      : (progress.done === progress.total ? "已打完，点“完成今天”保存记录。" : "不会自动进入下一份；明天重新选择。");
+    nodes.autoNote.classList.toggle("done", recorded || progress.done === progress.total);
+  }
+
+  function renderLibrary() {
+    if (state.detailId && planById.has(state.detailId)) {
+      renderPlanDetail(planById.get(state.detailId));
+      return;
+    }
+    if (state.selectedSeries) {
+      renderSeriesPlans(state.selectedSeries);
+      return;
+    }
+    nodes.libraryTitle.textContent = "餐单库";
+    nodes.librarySub.textContent = "先选系列，再看这个系列里的每天可选餐单。";
+    nodes.libraryContent.innerHTML = `
+      <div class="series-grid">
+        ${seriesNames.map((series) => {
+          const stats = seriesStats(series);
+          return `
+            <button class="series-card" type="button" data-series="${escapeHtml(series)}">
+              <strong>${escapeHtml(series)}</strong>
+              <span class="muted">${stats.plans.length} 个可选餐单</span>
+              <span class="series-meta">
+                <span class="count-pill">已打卡 ${stats.done} 次</span>
+                <span class="count-pill">点进系列</span>
+              </span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderSeriesPlans(series) {
+    const stats = seriesStats(series);
+    nodes.libraryTitle.textContent = series;
+    nodes.librarySub.textContent = `${stats.plans.length} 个可选餐单，先看详情再设为今天。`;
+    nodes.libraryContent.innerHTML = `
+      <div class="library-tools">
+        <button class="plain-button" type="button" data-back-series>全部系列</button>
+        <span class="pill">已打卡 ${stats.done} 次</span>
+      </div>
+      <div class="plan-list">
+        ${stats.plans.map((plan) => {
+          const active = state.activePlanId === plan.id;
+          return `
+            <article class="plan-card ${active ? "active" : ""}">
+              <div class="plan-title">
+                <span class="badge">${escapeHtml(plan.series || "餐单")}</span>
+                <strong>${escapeHtml(plan.title)}</strong>
+                <em>${escapeHtml(plan.summary || "")}</em>
+                <small>${plan.meals.length} 餐次 · 已打卡 ${countByPlan().get(plan.id) || 0} 次</small>
+              </div>
+              <div class="row-actions">
+                <button class="secondary-button" type="button" data-plan-detail="${escapeHtml(plan.id)}">看详情</button>
+                <button class="primary-button" type="button" data-set-current="${escapeHtml(plan.id)}">${active ? "今天已选" : "设为今天"}</button>
+              </div>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderPlanDetail(plan) {
+    nodes.libraryTitle.textContent = "餐单详情";
+    nodes.librarySub.textContent = plan.series || "餐单";
+    const active = state.activePlanId === plan.id;
+    nodes.libraryContent.innerHTML = `
+      <div class="library-tools">
+        <button class="plain-button" type="button" data-close-detail>返回${escapeHtml(plan.series || "系列")}</button>
+        <span class="pill">已打卡 ${countByPlan().get(plan.id) || 0} 次</span>
+      </div>
+      <article class="panel-card">
+        <div class="detail-head">
+          <span class="badge">${escapeHtml(plan.series || "餐单")}</span>
+          <h2>${escapeHtml(plan.title)}</h2>
+          <p class="muted">${escapeHtml(plan.fit || plan.summary || "")}</p>
+        </div>
+        <div class="meta-row">
+          <span class="count-pill">${plan.meals.length} 餐次</span>
+          <span class="count-pill">${escapeHtml(plan.source || "整理版")}</span>
+          <span class="count-pill">${active ? "今日餐单" : "未选择"}</span>
+        </div>
+        <div class="detail-meals">
+          ${plan.meals.map((meal) => `
+            <div>
+              <strong>${escapeHtml(meal.slot)}${meal.tag ? " · " + escapeHtml(meal.tag) : ""}</strong>
+              <span>${escapeHtml(meal.food)}</span>
+            </div>
+          `).join("")}
+        </div>
+        <ul class="detail-rules">
+          ${(plan.rules || []).map((rule) => `<li>${escapeHtml(rule)}</li>`).join("")}
+        </ul>
+        <div class="row-actions">
+          <button class="secondary-button" type="button" data-close-detail>返回列表</button>
+          <button class="primary-button" type="button" data-set-current="${escapeHtml(plan.id)}">${active ? "今天已选" : "设为今天"}</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderRecords() {
+    const counts = countByPlan();
+    const completedPlans = [...counts.values()].filter((value) => value > 0).length;
+    if (state.recordSeries) {
+      renderRecordSeries(state.recordSeries, counts);
+      return;
+    }
+    const topPlans = mealPlans
+      .map((plan) => ({ plan, count: counts.get(plan.id) || 0 }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count || a.plan.title.localeCompare(b.plan.title, "zh-Hans"))
+      .slice(0, 5);
+    nodes.recordsContent.innerHTML = `
+      <div class="stat-grid">
+        <div><span>完成次数</span><strong>${state.history.length}</strong></div>
+        <div><span>打卡过餐单</span><strong>${completedPlans}</strong></div>
+        <div><span>餐单总数</span><strong>${mealPlans.length}</strong></div>
+      </div>
+      <section class="panel-card">
+        <h3>按系列看次数</h3>
+        <div class="series-grid" style="margin-top:10px">
+          ${seriesNames.map((series) => {
+            const stats = seriesStats(series);
+            return `
+              <button class="series-card" type="button" data-record-series="${escapeHtml(series)}">
+                <strong>${escapeHtml(series)}</strong>
+                <span class="muted">${stats.plans.length} 个餐单</span>
+                <span class="series-meta"><span class="count-pill">已打卡 ${stats.done} 次</span></span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      </section>
+      <section class="panel-card">
+        <h3>常用餐单</h3>
+        <div class="record-list" style="margin-top:10px">
+          ${topPlans.length ? topPlans.map(({ plan, count }) => recordPlanRow(plan, count)).join("") : `<p class="empty">还没有完成记录。</p>`}
+        </div>
+      </section>
+      <section class="panel-card">
+        <div class="record-tools">
+          <h3>最近记录</h3>
+          <button class="plain-button" type="button" data-clear-history>清空</button>
+        </div>
+        <div class="recent-list">
+          ${state.history.length ? state.history.slice(0, 8).map((item) => `
+            <article class="recent-item">
+              <strong>${escapeHtml(item.planName)}</strong>
+              <span>${escapeHtml(item.date)} 完成 · ${Number(item.steps) || 0} 项</span>
+            </article>
+          `).join("") : `<p class="empty">还没有完成记录。</p>`}
+        </div>
+      </section>
+      <section class="source-panel">
+        <details>
+          <summary><span>来源与边界</span><em>非官方整理</em></summary>
+          ${sourceLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
+          <button class="plain-button" type="button" data-reset-all>重置全部打卡数据</button>
+        </details>
+      </section>
+    `;
+  }
+
+  function renderRecordSeries(series, counts) {
+    const stats = seriesStats(series);
+    nodes.recordsContent.innerHTML = `
+      <div class="record-tools">
+        <button class="plain-button" type="button" data-record-back>全部系列</button>
+        <span class="pill">${escapeHtml(series)} · ${stats.done} 次</span>
+      </div>
+      <div class="record-list">
+        ${stats.plans.map((plan) => recordPlanRow(plan, counts.get(plan.id) || 0)).join("")}
+      </div>
+    `;
+  }
+
+  function recordPlanRow(plan, count) {
+    return `
+      <article class="record-item">
+        <strong>${escapeHtml(plan.title)}</strong>
+        <span>${escapeHtml(plan.series || "餐单")} · 累计打卡 ${count} 次</span>
+        <div class="row-actions">
+          <button class="secondary-button" type="button" data-plan-detail="${escapeHtml(plan.id)}">看详情</button>
+          <button class="primary-button" type="button" data-set-current="${escapeHtml(plan.id)}">设为今天</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function render() {
+    renderTabs();
+    renderToday();
+    renderLibrary();
+    renderRecords();
+    saveState();
+  }
+
+  function setCurrent(planId) {
+    if (!planById.has(planId)) return;
+    const plan = planById.get(planId);
+    state.activePlanId = planId;
+    state.selectedSeries = plan.series || "";
+    state.detailId = "";
+    state.tab = "today";
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function completeToday() {
+    const plan = getActivePlan();
+    if (!plan) return;
+    const progress = progressForActive();
+    if (progress.done !== progress.total) return;
+    const date = todayKey();
+    state.history = state.history.filter((item) => !(item.date === date && item.planId === plan.id));
+    state.history.unshift({ date, planId: plan.id, planName: plan.title, steps: plan.meals.length });
+    state.history = state.history.slice(0, 120);
+    render();
+  }
+
+  function resetToday() {
+    const plan = getActivePlan();
+    if (!plan) return;
+    const date = todayKey();
+    if (state.checked[date]) state.checked[date][plan.id] = [];
+    state.history = state.history.filter((item) => !(item.date === date && item.planId === plan.id));
+    render();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  document.addEventListener("click", (event) => {
+    const tabButton = event.target.closest("[data-tab]");
+    const seriesButton = event.target.closest("[data-series]");
+    const backSeries = event.target.closest("[data-back-series]");
+    const detailButton = event.target.closest("[data-plan-detail]");
+    const closeDetail = event.target.closest("[data-close-detail]");
+    const setButton = event.target.closest("[data-set-current]");
+    const stepButton = event.target.closest("[data-step]");
+    const recordSeries = event.target.closest("[data-record-series]");
+    const recordBack = event.target.closest("[data-record-back]");
+    const clearHistory = event.target.closest("[data-clear-history]");
+    const resetAll = event.target.closest("[data-reset-all]");
+    if (tabButton) setTab(tabButton.dataset.tab);
+    if (seriesButton) {
+      state.selectedSeries = seriesButton.dataset.series;
+      state.detailId = "";
+      state.tab = "library";
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (backSeries) {
+      state.selectedSeries = "";
+      state.detailId = "";
+      render();
+    }
+    if (detailButton) {
+      const plan = planById.get(detailButton.dataset.planDetail);
+      if (plan) {
+        state.detailId = plan.id;
+        state.selectedSeries = plan.series || "";
+        state.tab = "library";
+        render();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+    if (closeDetail) {
+      state.detailId = "";
+      render();
+    }
+    if (setButton) setCurrent(setButton.dataset.setCurrent);
+    if (stepButton) {
+      const index = Number(stepButton.dataset.step);
+      const checked = getCheckedSet();
+      if (checked.has(index)) checked.delete(index);
+      else checked.add(index);
+      setCheckedSet(checked);
+      render();
+    }
+    if (recordSeries) {
+      state.recordSeries = recordSeries.dataset.recordSeries;
+      state.tab = "records";
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (recordBack) {
+      state.recordSeries = "";
+      render();
+    }
+    if (clearHistory) {
+      state.history = [];
+      render();
+    }
+    if (resetAll) {
+      if (!window.confirm("确认清空全部打卡数据？")) return;
+      Object.assign(state, defaultState());
+      render();
+    }
   });
-}
 
-render();
+  document.querySelector("#completeBtn")?.addEventListener("click", completeToday);
+  document.querySelector("#resetTodayBtn")?.addEventListener("click", resetToday);
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js?v=20260722t1");
+    });
+  }
+
+  render();
+})();
